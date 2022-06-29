@@ -32,21 +32,20 @@ class Ninjutsu(ninja.Writer):
 
     def __add_rules(self):
         self.rules_dir = os.path.join(os.path.dirname(__file__), "rules")
-        assert(os.path.exists(self.rules_dir) and os.path.isdir(self.rules_dir))
+        assert (os.path.exists(self.rules_dir) and os.path.isdir(self.rules_dir))
 
-        [self.include(escape_path(os.path.join(self.rules_dir, rule))) for rule in
-         glob.iglob("**/*.ninja", root_dir=self.rules_dir, recursive=True)]
+        path = os.path.join(self.rules_dir, "**/*.ninja")
+        [self.include(escape_path(os.path.join(self.rules_dir, rule))) for rule in glob.iglob(path, recursive=True)]
 
     def glob_sources(self, source_path, extension_name, recurse=False):
         predicate = "**/*." if recurse else "*."
         root_dir = os.path.join(os.getcwd(), *source_path.split('/'))
-        glob_it = glob.iglob(predicate + extension_name,
-                             root_dir=root_dir,
-                             recursive=recurse)
+        path = os.path.join(root_dir, predicate + extension_name)
+        glob_it = glob.iglob(path, recursive=recurse)
 
         for x in glob_it:
             s = os.path.join(root_dir, x)
-            base_name, _ = os.path.splitext(x)
+            base_name, _ = os.path.splitext(os.path.basename(x))
             o = self.make_obj_name(base_name)
             yield s, o
 
@@ -57,7 +56,7 @@ class Ninjutsu(ninja.Writer):
             obj_vars["flags"] = flags
 
         for src, obj in self.glob_sources(source_path, extension_name, recurse):
-            self.build(obj, extension_name, src, variables=obj_vars)
+            self.build(obj, 'cc', src, variables=obj_vars)
             objs.append(obj)
         return objs
 
@@ -68,25 +67,24 @@ class Ninjutsu(ninja.Writer):
         dylibs = []
         target_vars = {}
 
-        match target_t:
-            case 'exe':
-                target = self.make_exe_name(name)
-            case 'dylib':
-                target = self.make_dylib_name(name)
-            case 'lib':
-                target = self.make_lib_name(name)
-            case _:
-                assert "unexpected target type"
+        target_map = {
+            'exe': self.make_exe_name(name),
+            'dylib': self.make_dylib_name(name),
+            'lib': self.make_lib_name(name)
+        }
+
+        target = target_map.get(target_t)
+        assert target is not None
 
         for dependency in depends_on:
-            match dependency["target_t"]:
-                case 'dylib':
-                    implicits.append(dependency["target"])
-                    dylibs.append(dependency["name"])
-                case 'lib':
-                    inputs.append(dependency["target"])
-                case _:
-                    assert "unexpected target type"
+            dep_t = dependency["target_t"]
+            if dep_t == 'dylib':
+                implicits.append(dependency["target"])
+                dylibs.append(dependency["name"])
+            elif dep_t == 'lib':
+                inputs.append(dependency["target"])
+            else:
+                assert "unexpected target type"
 
         if any(dylibs):
             flags = flags + ["-l" + dylib for dylib in dylibs]
@@ -103,30 +101,30 @@ class Ninjutsu(ninja.Writer):
         return os.path.join(self.build_dir, "obj", name + ".o")
 
     def make_exe_name(self, name):
-        match sys.platform:
-            case 'win32':
-                return os.path.join(self.build_dir, "bin", name + ".exe")
-            case 'cygwin':
-                return os.path.join(self.build_dir, "bin", name + ".exe")
-            case _:
-                return os.path.join(self.build_dir, "bin", name)
+        names_map = {
+            'win32': os.path.join(self.build_dir, "bin", name + ".exe"),
+            'cygwin': os.path.join(self.build_dir, "bin", name + ".exe"),
+            'default': os.path.join(self.build_dir, "bin", name)
+        }
+
+        return names_map.get(sys.platform, names_map.get('default'))
 
     def make_dylib_name(self, name):
-        match sys.platform:
-            case 'win32':
-                return os.path.join(self.build_dir, "bin", name + ".dll")
-            case 'cygwin':
-                return os.path.join(self.build_dir, "bin", name + ".dll")
-            case 'darwin':
-                return os.path.join(self.build_dir, "bin", name + ".dylib")
-            case _:
-                return os.path.join(self.build_dir, "bin", name + ".so")
+        names_map = {
+            'win32': os.path.join(self.build_dir, "bin", name + ".dll"),
+            'cygwin': os.path.join(self.build_dir, "bin", name + ".dll"),
+            'darwin': os.path.join(self.build_dir, "bin", name + ".dylib"),
+            'default': os.path.join(self.build_dir, "bin", name + ".so")
+        }
+
+        return names_map.get(sys.platform, names_map.get('default'))
 
     def make_lib_name(self, name):
-        match sys.platform:
-            case 'win32':
-                return os.path.join(self.build_dir, "bin", name + ".lib")
-            case 'cygwin':
-                return os.path.join(self.build_dir, "bin", name + ".lib")
-            case _:
-                return os.path.join(self.build_dir, "bin", name + ".a")
+
+        names_map = {
+            'win32': os.path.join(self.build_dir, "bin", name + ".lib"),
+            'cygwin': os.path.join(self.build_dir, "bin", name + ".lib"),
+            'default': os.path.join(self.build_dir, "bin", name + ".a")
+        }
+
+        return names_map.get(sys.platform, names_map.get('default'))
