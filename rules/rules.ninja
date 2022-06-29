@@ -1,0 +1,15 @@
+rule cc
+    depfile = $out.d
+    command = clang++ -MD -MF $out.d $flags -c $in -o $out
+
+rule exe
+    command = clang++ $flags $in -o $out
+
+rule lib
+    command = llvm-ar rc $out $in
+
+rule dylib
+    command = clang++ $flags -shared $in -o $out
+
+
+
