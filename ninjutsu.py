@@ -5,6 +5,10 @@ import sys
 import ninja
 
 
+def escape_path(word):
+    return word.replace('$ ', '$$ ').replace(' ', '$ ').replace(':', '$:')
+
+
 class Ninjutsu(ninja.Writer):
     def __init__(self):
         super().__init__(open("build.ninja", "w"))
@@ -27,12 +31,11 @@ class Ninjutsu(ninja.Writer):
         self.newline()
 
     def __add_rules(self):
-        self.rules_dir = os.path.join(os.getcwd(), "rules")
-        if not os.path.exists(self.rules_dir):
-            os.mkdir(self.rules_dir)
+        self.rules_dir = os.path.join(os.path.dirname(__file__), "rules")
+        assert(os.path.exists(self.rules_dir) and os.path.isdir(self.rules_dir))
 
-        assert (os.path.isdir(self.rules_dir))
-        [self.include("rules/" + rule) for rule in glob.iglob("**/*.ninja", root_dir=self.rules_dir, recursive=True)]
+        [self.include(escape_path(os.path.join(self.rules_dir, rule))) for rule in
+         glob.iglob("**/*.ninja", root_dir=self.rules_dir, recursive=True)]
 
     def glob_sources(self, source_path, extension_name, recurse=False):
         predicate = "**/*." if recurse else "*."
