@@ -11,5 +11,6 @@ rule lib
 rule dylib
     command = clang++ $flags -shared $in -o $out
 
-
+rule shader
+    command = glslc $in -o $out
 

@@ -37,7 +37,7 @@ class Ninjutsu(ninja.Writer):
         path = os.path.join(self.rules_dir, "**/*.ninja")
         [self.include(escape_path(os.path.join(self.rules_dir, rule))) for rule in glob.iglob(path, recursive=True)]
 
-    def glob_sources(self, source_path, extension_name, recurse=False):
+    def glob_sources(self, source_path, extension_name, out_extension_fn, recurse=False):
         predicate = "**/*." if recurse else "*."
         root_dir = os.path.join(os.getcwd(), *source_path.split('/'))
         path = os.path.join(root_dir, predicate + extension_name)
@@ -46,8 +46,23 @@ class Ninjutsu(ninja.Writer):
         for x in glob_it:
             s = os.path.join(root_dir, x)
             base_name, _ = os.path.splitext(os.path.basename(x))
-            o = self.make_obj_name(base_name)
+            o = out_extension_fn(base_name)
             yield s, o
+
+    def make_shaders(self, source_path, recurse=False):
+        shaders = []
+        frag_sources = self.glob_sources(source_path, "frag", self.make_frag_shader_name, recurse)
+        vert_sources = self.glob_sources(source_path, "vert", self.make_vert_shader_name, recurse)
+
+        for src, shader in frag_sources:
+            self.build(shader, 'shader', src)
+            shaders.append(shader)
+
+        for src, shader in vert_sources:
+            self.build(shader, 'shader', src)
+            shaders.append(shader)
+
+        return shaders
 
     def make_objs(self, source_path, extension_name, recurse=False, flags=[]):
         objs = []
@@ -55,7 +70,7 @@ class Ninjutsu(ninja.Writer):
         if any(flags):
             obj_vars["flags"] = flags
 
-        for src, obj in self.glob_sources(source_path, extension_name, recurse):
+        for src, obj in self.glob_sources(source_path, extension_name, self.make_obj_name, recurse):
             self.build(obj, 'cc', src, variables=obj_vars)
             objs.append(obj)
         return objs
@@ -97,6 +112,12 @@ class Ninjutsu(ninja.Writer):
 
         return {"target_t": target_t, "target": target, "name": name}
 
+    def make_frag_shader_name(self, name):
+        return os.path.join(self.build_dir,"bin", "shaders", name + ".frag.spv")
+
+    def make_vert_shader_name(self, name):
+        return os.path.join(self.build_dir, "bin", "shaders", name + ".vert.spv")
+
     def make_obj_name(self, name):
         return os.path.join(self.build_dir, "obj", name + ".o")
 
@@ -120,7 +141,6 @@ class Ninjutsu(ninja.Writer):
         return names_map.get(sys.platform, names_map.get('default'))
 
     def make_lib_name(self, name):
-
         names_map = {
             'win32': os.path.join(self.build_dir, "bin", name + ".lib"),
             'cygwin': os.path.join(self.build_dir, "bin", name + ".lib"),
